@@ -17,7 +17,16 @@ public class ServerHarness {
     smb.start();
     System.out.println(ftp.port() + " " + smb.port());
     System.out.flush();
-    System.in.read();
+    int command;
+    while ((command = System.in.read()) >= 0) {
+      if (command == 'd') {
+        System.out.println(
+            java.util.Base64.getEncoder()
+                .encodeToString(
+                    smb.diagnostics().getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+        System.out.flush();
+      } else if (command == '\n') break;
+    }
     ftp.close();
     smb.close();
   }

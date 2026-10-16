@@ -22,7 +22,7 @@ public final class FtpService extends Service {
 
   public static String diagnostics() {
     SmbServer server = diagnosticServer;
-    return "版本 2.1\n"
+    return "版本 2.2\n"
         + status
         + "\n"
         + folderStatus

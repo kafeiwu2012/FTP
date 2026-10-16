@@ -40,6 +40,24 @@ class SharingTests(unittest.TestCase):
   subprocess.run(['javac','-encoding','UTF-8','-d',str(BUILD),*[str(source/(n+'.java')) for n in ['AccessPolicy','FtpServer','Ntlm','RpcPipe','SmbServer']],str(REPO/'tests/LocalFileSystem.java'),str(REPO/'tests/ServerHarness.java')],check=True)
  @classmethod
  def tearDownClass(cls):cls.build.cleanup()
+ def test_diagnostics_capture_transport_and_successful_commands(self):
+  import base64
+  with tempfile.TemporaryDirectory() as d:
+   pathlib.Path(d,'private-file-name.txt').write_text('secret')
+   p=subprocess.Popen(['java','-cp',str(BUILD),'com.lanftp.ServerHarness',d],stdin=subprocess.PIPE,stdout=subprocess.PIPE,text=True)
+   try:
+    ftp,port=map(int,p.stdout.readline().split())
+    c=smb_login(port)
+    try:self.assertIn('private-file-name.txt',[e.get_longname() for e in c.listPath('share','*')])
+    finally:c.close()
+    with socket.create_connection(('127.0.0.1',port),timeout=5) as bad:
+     bad.sendall(b'\x00\x00\x00\x40'+bytes(64));self.assertEqual(bad.recv(1),b'')
+    p.stdin.write('d');p.stdin.flush();report=base64.b64decode(p.stdout.readline()).decode()
+    self.assertIn('TCP连接=2',report);self.assertIn('SMB 监听已就绪',report)
+    self.assertIn('命令=14 类型=',report);self.assertIn('命令=0 类型=-1 状态=0x00000000',report)
+    self.assertIn('IOException',report);self.assertNotIn('private-file-name',report);self.assertNotIn('test-password',report)
+   finally:
+    p.stdin.write('\n');p.stdin.flush();p.wait(timeout=10);p.stdin.close();p.stdout.close()
  def test_directory_formats_identity_and_end_error(self):
   with server() as (root,ftp,port):
    (root/'nested').mkdir();(root/'nested'/'你好.txt').write_text('nested')
@@ -187,7 +205,10 @@ class SharingTests(unittest.TestCase):
     finally:conn._generate_signature=original
     with self.assertRaises(SMBResponseException) as cm:conn.receive(pending)
     self.assertEqual(cm.exception.status,0xc0000022)
-   finally:smbclient.reset_connection_cache(connection_cache=cache)
+   finally:
+    # A rejected forged request may leave the client worker disconnected during cleanup.
+    from smbprotocol.exceptions import SMBConnectionClosed
+    with contextlib.suppress(SMBConnectionClosed):smbclient.reset_connection_cache(connection_cache=cache)
  def test_guest_respects_client_required_signing(self):
   with server(anonymous=True) as (_,_,port):
    cache={}

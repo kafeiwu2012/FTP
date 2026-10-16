@@ -33,14 +33,34 @@ public final class SmbServer implements Closeable {
   private final Set<Handle> allHandles = ConcurrentHashMap.newKeySet();
   private volatile boolean running = true;
   private final ArrayDeque<String> events = new ArrayDeque<>();
+  private final java.util.concurrent.atomic.AtomicLong connections =
+      new java.util.concurrent.atomic.AtomicLong();
+  private final java.util.concurrent.atomic.AtomicLong frames =
+      new java.util.concurrent.atomic.AtomicLong();
+  private final java.util.concurrent.atomic.AtomicLong commands =
+      new java.util.concurrent.atomic.AtomicLong();
+  private final java.util.concurrent.atomic.AtomicLong directoryQueries =
+      new java.util.concurrent.atomic.AtomicLong();
+  private final long diagnosticStarted = System.nanoTime();
 
   private synchronized void record(String event) {
     if (events.size() == 32) events.removeFirst();
-    events.addLast(event);
+    events.addLast(((System.nanoTime() - diagnosticStarted) / 1000000) + "ms " + event);
   }
 
   public synchronized String diagnostics() {
-    return events.isEmpty() ? "尚无 SMB 请求" : String.join("\n", events);
+    return "监听端口="
+        + port()
+        + " TCP连接="
+        + connections.get()
+        + " 帧="
+        + frames.get()
+        + " 命令="
+        + commands.get()
+        + " 目录请求="
+        + directoryQueries.get()
+        + "\n"
+        + String.join("\n", events);
   }
 
   private static long fileIndex(String path) {
@@ -63,6 +83,7 @@ public final class SmbServer implements Closeable {
     listener = new ServerSocket();
     listener.setReuseAddress(true);
     listener.bind(new InetSocketAddress(port));
+    record("SMB 监听已就绪");
   }
 
   public int port() {
@@ -75,6 +96,8 @@ public final class SmbServer implements Closeable {
               while (running)
                 try {
                   Socket s = listener.accept();
+                  long connection = connections.incrementAndGet();
+                  record("TCP 连接 #" + connection);
                   s.setSoTimeout(120000);
                   clients.add(s);
                   try {
@@ -91,11 +114,15 @@ public final class SmbServer implements Closeable {
                           }
                         });
                   } catch (RejectedExecutionException e) {
+                    record("连接被拒绝：并发连接已满");
                     clients.remove(s);
                     s.close();
                   }
                 } catch (IOException e) {
-                  if (running) close();
+                  if (running) {
+                    record("监听失败：" + e.getClass().getSimpleName());
+                    close();
+                  }
                 }
             },
             "smb-accept")
@@ -247,15 +274,21 @@ public final class SmbServer implements Closeable {
           try {
             type = in.readUnsignedByte();
           } catch (EOFException e) {
+            record("客户端断开连接");
             break;
           }
           int length =
               (in.readUnsignedByte() << 16) | (in.readUnsignedByte() << 8) | in.readUnsignedByte();
           if (type == 0x85 && length == 0) continue;
-          if (type != 0 || length < 64 || length > MAX_FRAME) break;
+          if (type != 0 || length < 64 || length > MAX_FRAME) {
+            record("无效帧头 类型=" + type + " 长度=" + length);
+            break;
+          }
           byte[] frame = new byte[length];
           in.readFully(frame);
+          frames.incrementAndGet();
           if (frame[0] == (byte) 0xff && frame[4] == 0x72) {
+            record("SMB1 协商探测，回应 SMB2");
             byte[] request = new byte[64];
             request[0] = (byte) 0xfe;
             request[1] = 'S';
@@ -537,7 +570,9 @@ public final class SmbServer implements Closeable {
       if (reply.status != 0 && reply.bytes.length == 0)
         reply.bytes =
             allocate(9).putShort((short) 9).putShort((short) 0).putInt(0).put((byte) 0).array();
-      if (command == 14 || command == 16 || reply.status != 0) {
+      commands.incrementAndGet();
+      if (command == 14) directoryQueries.incrementAndGet();
+      {
         int cls =
             request.length > 67 && (command == 14 || command == 16)
                 ? request[command == 14 ? 66 : 67] & 255
