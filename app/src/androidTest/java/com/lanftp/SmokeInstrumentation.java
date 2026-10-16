@@ -56,16 +56,14 @@ public final class SmokeInstrumentation extends Instrumentation {
             List<EditText> fields = new ArrayList<>();
             List<Switch> flags = new ArrayList<>();
             collect(activity.getWindow().getDecorView(), fields, flags);
-            if (fields.size() != 4 || flags.size() != 4)
+            if (fields.size() != 3 || flags.size() != 3)
               throw new IllegalStateException("Unexpected test UI");
             fields.get(0).setText("tester");
             fields.get(1).setText("test-password");
             fields.get(2).setText("2121");
-            fields.get(3).setText("445");
             flags.get(0).setChecked(true);
             flags.get(1).setChecked(true);
             flags.get(2).setChecked(false);
-            flags.get(3).setChecked(true);
             button("启动文件共享").performClick();
           });
       deadline = SystemClock.elapsedRealtime() + 180000;
@@ -74,7 +72,6 @@ public final class SmokeInstrumentation extends Instrumentation {
           throw new IOException(FtpService.status);
         SystemClock.sleep(250);
       }
-      if (FtpService.activeSmbPort == 0) throw new IOException(FtpService.smbStatus);
       String ready =
           "uid="
               + android.os.Process.myUid()
@@ -82,12 +79,8 @@ public final class SmokeInstrumentation extends Instrumentation {
               + FtpService.activePort
               + "\nweb="
               + FtpService.activeWebPort
-              + "\nsmb="
-              + FtpService.activeSmbPort
               + "\n"
               + FtpService.status
-              + "\n"
-              + FtpService.smbStatus
               + "\n";
       try (FileWriter writer =
           new FileWriter(new File(getTargetContext().getFilesDir(), "smoke-ready"))) {

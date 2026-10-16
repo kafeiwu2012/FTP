@@ -9,34 +9,26 @@ import android.os.*;
 import java.net.*;
 import java.util.*;
 
-/** FTP and SMB always share the same immutable policy and granted document tree. */
+/** FTP and browser access always share the same immutable policy and granted document tree. */
 public final class FtpService extends Service {
   public static volatile boolean running = false;
   public static volatile String activeUser = "", activePassword = "";
-  public static volatile int activePort = 2121, activeSmbPort = 0, activeWebPort = 0;
-  public static volatile boolean activeSmbEnabled = true;
+  public static volatile int activePort = 2121, activeWebPort = 0;
   public static volatile AccessPolicy activePolicy = AccessPolicy.READ_ONLY;
-  public static volatile String status = "服务器已停止", smbStatus = "SMB 未启动";
+  public static volatile String status = "服务器已停止";
   public static volatile String folderStatus = "尚未检查共享目录";
-  private static volatile SmbServer diagnosticServer;
   private static volatile WebServer diagnosticWeb;
 
   public static String diagnostics() {
-    SmbServer server = diagnosticServer;
-    return "版本 3.0\n"
+    return "版本 3.1\n"
         + status
         + "\n"
         + folderStatus
         + "\n"
-        + smbStatus
-        + "\n\n"
-        + (diagnosticWeb == null ? "网页未启动" : diagnosticWeb.diagnostics())
-        + "\n\n"
-        + (server == null ? "尚无 SMB 诊断" : server.diagnostics());
+        + (diagnosticWeb == null ? "网页未启动" : diagnosticWeb.diagnostics());
   }
 
   private FtpServer ftp;
-  private SmbServer smb;
   private WebServer web;
   private PowerManager.WakeLock wake;
   private WifiManager.WifiLock wifi;
@@ -79,9 +71,6 @@ public final class FtpService extends Service {
     for (String ip : ips.isEmpty() ? Collections.<String>emptyList() : ips.subList(0, 1)) {
       if (activeWebPort != 0) lines.add("网页  http://" + ip + ":" + activeWebPort);
       lines.add("FTP  ftp://" + ip + ":" + activePort);
-      if (activeSmbPort != 0)
-        lines.add(
-            "SMB  smb://" + ip + (activeSmbPort == 445 ? "" : ":" + activeSmbPort) + "/share");
     }
     if (ips.size() > 1) lines.add("其他网络地址可点“复制连接地址”选择");
     return lines.isEmpty()
@@ -135,14 +124,11 @@ public final class FtpService extends Service {
     else startForeground(1, notification("正在启动…"));
     status = "正在启动…";
     folderStatus = "正在检查共享目录";
-    diagnosticServer = null;
     diagnosticWeb = null;
-    smbStatus = "SMB 正在准备…";
     String folder = intent.getStringExtra("folder"),
         user = intent.getStringExtra("user"),
         password = intent.getStringExtra("password");
-    int port = intent.getIntExtra("port", 2121), smbPort = intent.getIntExtra("smbPort", 445);
-    boolean smbEnabled = intent.getBooleanExtra("smbEnabled", true);
+    int port = intent.getIntExtra("port", 2121);
     AccessPolicy policy =
         new AccessPolicy(
             intent.getBooleanExtra("writable", false),
@@ -156,11 +142,7 @@ public final class FtpService extends Service {
                     || AccessPolicy.isGuest(user)
                     || password == null
                     || password.length() < 8) throw new IllegalArgumentException("请填写目录及独立账号密码");
-                if (port < 1024
-                    || port > 65535
-                    || (smbPort != 445 && (smbPort < 1024 || smbPort > 65535))
-                    || (smbEnabled && port == smbPort))
-                  throw new IllegalArgumentException("端口设置无效");
+                if (port < 1024 || port > 65535) throw new IllegalArgumentException("端口设置无效");
                 Uri tree = Uri.parse(folder);
                 boolean read = false, write = false;
                 for (UriPermission permission : getContentResolver().getPersistedUriPermissions())
@@ -184,32 +166,8 @@ public final class FtpService extends Service {
                 synchronized (lock) {
                   if (destroyed) return;
                   ftp = new FtpServer(fs, user, password, port, policy);
-                  activeSmbPort = 0;
-                  activeSmbEnabled = smbEnabled;
-                  if (smbEnabled) {
-                    try {
-                      smb = new SmbServer(fs, user, password, smbPort, policy);
-                      smbStatus = "SMB2 已启动 · 端口 " + smbPort;
-                    } catch (java.io.IOException primary) {
-                      if (smbPort != 445) {
-                        smbStatus = "SMB 启动失败：端口不可用（FTP 可继续使用）";
-                      } else
-                        try {
-                          int fallback = port == 1445 ? 1446 : 1445;
-                          smb = new SmbServer(fs, user, password, fallback, policy);
-                          smbStatus = "445 端口不可用，已改用 " + fallback + "；iPad 请优先使用网页地址";
-                        } catch (java.io.IOException fallback) {
-                          smbStatus = "SMB 启动失败：445 及备用端口均不可用（FTP 可继续使用）";
-                        }
-                    }
-                    if (smb != null) {
-                      activeSmbPort = smb.port();
-                      diagnosticServer = smb;
-                      smb.start();
-                    }
-                  } else smbStatus = "SMB 已关闭";
                   for (int candidate = 8080; candidate <= 8090; candidate++) {
-                    if (candidate == port || candidate == activeSmbPort) continue;
+                    if (candidate == port) continue;
                     try {
                       web = new WebServer(fs, user, password, candidate, policy);
                       break;
@@ -243,10 +201,7 @@ public final class FtpService extends Service {
                           + (policy.anonymous
                               ? (policy.anonymousWritable ? " · 匿名可读写" : " · 匿名只读")
                               : " · 需账号登录");
-                  getSystemService(NotificationManager.class)
-                      .notify(
-                          1,
-                          notification(status + (smbEnabled && smb == null ? " · SMB 启动失败" : "")));
+                  getSystemService(NotificationManager.class).notify(1, notification(status));
                 }
               } catch (Exception e) {
                 status =
@@ -278,10 +233,6 @@ public final class FtpService extends Service {
         ftp.close();
         ftp = null;
       }
-      if (smb != null) {
-        smb.close();
-        smb = null;
-      }
       if (web != null) {
         web.close();
         web = null;
@@ -292,10 +243,8 @@ public final class FtpService extends Service {
       running = false;
       activePassword = "";
       activeUser = "";
-      activeSmbPort = 0;
     }
     if (status.startsWith("运行") || status.startsWith("正在")) status = "服务器已停止";
-    smbStatus = "SMB 已停止";
     stopForeground(STOP_FOREGROUND_REMOVE);
     super.onDestroy();
   }

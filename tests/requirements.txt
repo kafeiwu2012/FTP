@@ -1,2 +1,0 @@
-smbprotocol==1.16.0
-impacket==0.13.0

@@ -1,6 +1,6 @@
 package com.lanftp;
 
-/** One immutable access policy shared by FTP and SMB for the entire service session. */
+/** One immutable access policy shared by FTP and browser access for the entire service session. */
 public final class AccessPolicy {
   public static final AccessPolicy READ_ONLY = new AccessPolicy(false, false, false);
   public final boolean writable, anonymous, anonymousWritable;

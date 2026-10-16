@@ -17,9 +17,9 @@ import java.security.SecureRandom;
 public final class MainActivity extends Activity {
   private static final int PICK_FOLDER = 100;
   private final Handler handler = new Handler(Looper.getMainLooper());
-  private TextView state, address, folderView, smbState;
-  private EditText user, password, port, smbPort;
-  private Switch writable, anonymous, anonymousWrite, smbEnabled;
+  private TextView state, address, folderView;
+  private EditText user, password, port;
+  private Switch writable, anonymous, anonymousWrite;
   private Button start, choose;
   private Uri folder;
   private final int ink = Color.rgb(22, 37, 56),
@@ -120,21 +120,19 @@ public final class MainActivity extends Activity {
     root.setPadding(dp(24), dp(28), dp(24), dp(28));
     scroll.addView(root);
     setContentView(scroll);
-    root.addView(text("LAN / FILE SHARING · 3.0", 12, blue));
+    root.addView(text("LAN / FILE SHARING · 3.1", 12, blue));
     TextView title = text("把手机文件，\n留在你的局域网。", 30, ink);
     title.setTypeface(null, Typeface.BOLD);
     root.addView(title);
-    root.addView(text("网页 + FTP + SMB2 · 手机本地文件共享", 14, muted));
+    root.addView(text("网页 + FTP · 手机本地文件共享", 14, muted));
     state = text("服务器已停止", 17, blue);
     state.setTypeface(null, Typeface.BOLD);
     root.addView(state);
-    address = text("启动后显示网页 / FTP / SMB 地址", 16, ink);
+    address = text("启动后显示网页 / FTP 地址", 16, ink);
     address.setTextIsSelectable(true);
     address.setPadding(dp(16), dp(16), dp(16), dp(16));
     address.setBackground(background(Color.WHITE, 12));
     root.addView(address);
-    smbState = text("SMB 尚未启动", 13, muted);
-    root.addView(smbState);
     Button browser = button("在本机预览共享文件");
     root.addView(browser);
     browser.setOnClickListener(
@@ -188,12 +186,6 @@ public final class MainActivity extends Activity {
             if (FtpService.activeWebPort != 0)
               options.add("http://" + ip + ":" + FtpService.activeWebPort);
             options.add("ftp://" + ip + ":" + FtpService.activePort);
-            if (FtpService.activeSmbPort != 0)
-              options.add(
-                  "smb://"
-                      + ip
-                      + (FtpService.activeSmbPort == 445 ? "" : ":" + FtpService.activeSmbPort)
-                      + "/share");
           }
           new AlertDialog.Builder(this)
               .setTitle("选择要复制的连接地址")
@@ -257,19 +249,10 @@ public final class MainActivity extends Activity {
             "端口（1024–65535）",
             getPreferences(0).getString("port", "2121"),
             InputType.TYPE_CLASS_NUMBER);
-    smbEnabled =
-        toggle(root, "同时启用 SMB2（支持 SMB 的客户端使用）", getPreferences(0).getBoolean("smbEnabled", true));
-    smbPort =
-        field(
-            root,
-            "SMB 端口（默认 445；不可用时自动尝试 1445）",
-            getPreferences(0).getString("smbPort", "445"),
-            InputType.TYPE_CLASS_NUMBER);
     if (FtpService.running) {
       writable.setChecked(FtpService.activePolicy.writable);
       anonymous.setChecked(FtpService.activePolicy.anonymous);
       anonymousWrite.setChecked(FtpService.activePolicy.anonymousWritable);
-      smbEnabled.setChecked(FtpService.activeSmbEnabled);
     }
     start = button("启动文件共享");
     root.addView(start);
@@ -285,15 +268,12 @@ public final class MainActivity extends Activity {
                 + "iPad / Windows 浏览器：输入上方 http:// 网页地址，浏览并下载文件；开启写入权限后可上传、覆盖、删除。下载后可保存到 iPad 的文件"
                 + " App。网页无需安装其他软件。\n\n"
                 + "账号：未开启匿名访问时，浏览器会要求填写手机界面中的账号密码。匿名只读时，可点击网页的账号登录使用账号写入权限。\n\n"
-                + "FTP：使用 FileZilla 或支持 FTP 的文件管理器。SMB：Windows 默认使用"
-                + " \\\\手机IP\\share；高位端口需要支持自定义端口的客户端。\n\n"
-                + "免 Root 手机可能无法监听 SMB 的 445 端口；高位端口不能保证兼容 iPad 原生文件 App，建议优先使用 Safari 网页。应用不会请求"
-                + " Root。",
+                + "FTP：使用 FileZilla 或支持 FTP 的文件管理器，输入上方 ftp:// 地址。应用无需 Root。",
             14,
             muted));
     root.addView(
         text(
-            "仅在可信局域网使用：网页与 FTP 明文传输，SMB2 也不提供文件内容加密，请勿设置路由器端口映射。Android"
+            "仅在可信局域网使用：网页与 FTP 明文传输，请勿设置路由器端口映射。Android"
                 + " 只允许访问你授权的文件夹；部分系统禁止选择存储根目录、Android/data 等目录。\n\n"
                 + "关闭共享可停止文件访问。系统省电策略可能暂停连接；Android 15 长时间后台传输可能在约 6 小时后停止，需要手动重新启动。",
             12,
@@ -332,20 +312,12 @@ public final class MainActivity extends Activity {
       return;
     }
     String u = user.getText().toString().trim(), p = password.getText().toString();
-    int n, s;
+    int n;
     try {
       n = Integer.parseInt(port.getText().toString());
       if (n < 1024 || n > 65535) throw new NumberFormatException();
     } catch (NumberFormatException e) {
       toast("端口须为 1024–65535");
-      return;
-    }
-    try {
-      s = Integer.parseInt(smbPort.getText().toString());
-      if (s != 445 && (s < 1024 || s > 65535)) throw new NumberFormatException();
-      if (smbEnabled.isChecked() && s == n) throw new NumberFormatException();
-    } catch (NumberFormatException e) {
-      toast("SMB 端口请选择 445 或 1024–65535，且不能与 FTP 相同");
       return;
     }
     boolean hasWrite = false;
@@ -371,8 +343,6 @@ public final class MainActivity extends Activity {
         .edit()
         .putString("user", u)
         .putString("port", Integer.toString(n))
-        .putString("smbPort", Integer.toString(s))
-        .putBoolean("smbEnabled", smbEnabled.isChecked())
         .putBoolean("writable", writable.isChecked())
         .putBoolean("anonymous", anonymous.isChecked())
         .putBoolean("anonymousWritable", anonymousWrite.isChecked())
@@ -387,8 +357,6 @@ public final class MainActivity extends Activity {
             .putExtra("user", u)
             .putExtra("password", p)
             .putExtra("port", n)
-            .putExtra("smbPort", s)
-            .putExtra("smbEnabled", smbEnabled.isChecked())
             .putExtra("writable", writable.isChecked())
             .putExtra("anonymous", anonymous.isChecked())
             .putExtra("anonymousWritable", anonymousWrite.isChecked());
@@ -399,7 +367,6 @@ public final class MainActivity extends Activity {
       writable.setEnabled(false);
       anonymous.setEnabled(false);
       anonymousWrite.setEnabled(false);
-      smbEnabled.setEnabled(false);
       toast("正在启动；当前界面中的账号密码用于本次共享");
     } catch (RuntimeException e) {
       toast("无法启动，请保持应用在前台后重试");
@@ -426,9 +393,6 @@ public final class MainActivity extends Activity {
     writable.setEnabled(enabled);
     anonymous.setEnabled(enabled);
     anonymousWrite.setEnabled(enabled && writable.isChecked() && anonymous.isChecked());
-    smbEnabled.setEnabled(enabled);
-    smbPort.setEnabled(enabled);
-    setIfChanged(smbState, FtpService.smbStatus);
     if (active) {
       setIfChanged(address, FtpService.addresses());
     } else setIfChanged(address, getString(R.string.address_pending));

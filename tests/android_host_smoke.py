@@ -5,7 +5,6 @@ Uses the real Android SAF backend and foreground service through adb TCP forward
 No device Root, fabricated document grants, or changes to other directories are used.
 """
 import ftplib, hashlib, io, os, pathlib, socket, subprocess, time
-from impacket.smbconnection import SMBConnection, SessionError
 from test_web import request
 
 ADB=os.environ.get('ADB','/workspace/tools/android-sdk/platform-tools/adb')
@@ -30,29 +29,16 @@ def main():
  else:raise RuntimeError('Android instrumentation did not report ready; inspect its result')
  fields=dict(line.split('=',1) for line in ready.splitlines() if '=' in line)
  assert int(fields['uid'])>=10000,'App must run as an ordinary non-root Android UID'
- ftp_port,smb_port=forward(int(fields['ftp'])),forward(int(fields['smb']))
+ ftp_port=forward(int(fields['ftp']))
  print(ready.strip(),flush=True)
  payload=os.urandom(70013);original=b'Android SAF integration fixture\n'
- c=SMBConnection('LANFTP','127.0.0.1',sess_port=smb_port,timeout=30);c.login('tester','test-password')
- try:
-  assert 'share' in [str(x['shi1_netname']).rstrip('\0') for x in c.listShares()]
-  out=io.BytesIO();c.getFile('share','sample.txt',out.write);assert out.getvalue()==original
-  with ftp_login(ftp_port) as f:f.storbinary('STOR 手机上传.bin',io.BytesIO(payload))
-  out=io.BytesIO();c.getFile('share','手机上传.bin',out.write);assert out.getvalue()==payload
-  c.putFile('share','smb-upload.bin',io.BytesIO(payload).read)
-  with ftp_login(ftp_port) as f:
-   out=io.BytesIO();f.retrbinary('RETR smb-upload.bin',out.write);assert out.getvalue()==payload
-   f.mkd('ftp-dir');f.storbinary('STOR ftp-dir/one.txt',io.BytesIO(b'one'));f.delete('ftp-dir/one.txt');f.rmd('ftp-dir')
-  c.rename('share','smb-upload.bin','smb-renamed.bin');c.deleteFile('share','smb-renamed.bin');c.deleteFile('share','手机上传.bin')
-  print('PASS: actual SAF FTP/SMB Unicode upload, cross-protocol download SHA-256, rename, delete, mkdir/rmdir',flush=True)
- finally:c.close()
- guest=SMBConnection('LANFTP','127.0.0.1',sess_port=smb_port,timeout=30);guest.login('anonymous','')
- try:
-  assert guest.isGuestSession();out=io.BytesIO();guest.getFile('share','sample.txt',out.write);assert out.getvalue()==original
-  try:guest.putFile('share','must-not-exist.txt',io.BytesIO(b'bad').read)
-  except SessionError as e:assert e.getErrorCode()==0xc0000022
-  else:raise AssertionError('Anonymous SMB write was not denied')
- finally:guest.close()
+ with ftp_login(ftp_port) as f:
+  out=io.BytesIO();f.retrbinary('RETR sample.txt',out.write);assert out.getvalue()==original
+  f.storbinary('STOR 手机上传.bin',io.BytesIO(payload))
+  f.rename('手机上传.bin','改名.bin')
+  out=io.BytesIO();f.retrbinary('RETR 改名.bin',out.write);assert out.getvalue()==payload
+  f.delete('改名.bin');f.mkd('ftp-dir');f.rmd('ftp-dir')
+ print('PASS: actual SAF FTP Unicode upload, download byte comparison, rename, delete, mkdir/rmdir',flush=True)
  with ftp_login(ftp_port,'anonymous','') as f:
   assert 'sample.txt' in f.nlst()
   try:f.storbinary('STOR must-not-exist.txt',io.BytesIO(b'bad'))

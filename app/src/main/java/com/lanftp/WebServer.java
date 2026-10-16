@@ -8,7 +8,7 @@ import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicLong;
 
-/** Streaming, same-origin browser access to the same granted tree and immutable FTP/SMB policy. */
+/** Streaming, same-origin browser access to the same granted tree and immutable FTP access policy. */
 public final class WebServer implements Closeable {
   private final FtpServer.Vfs fs;
   private final AccessPolicy policy;
