@@ -11,9 +11,9 @@ class FtpTests(unittest.TestCase):
   (cls.root/'empty.txt').write_bytes(b'')
   build=cls.root/'classes';build.mkdir()
   repo=pathlib.Path(__file__).resolve().parents[1]
-  subprocess.run(['javac','-encoding','UTF-8','-d',str(build),str(repo/'app/src/main/java/com/lanftp/FtpServer.java'),str(repo/'tests/ServerHarness.java')],check=True)
+  subprocess.run(['javac','-encoding','UTF-8','-d',str(build),*[str(p) for p in (repo/'app/src/main/java/com/lanftp').glob('*.java') if p.name in ['FtpServer.java','AccessPolicy.java','SmbServer.java','Ntlm.java','RpcPipe.java']],str(repo/'tests/LocalFileSystem.java'),str(repo/'tests/ServerHarness.java')],check=True)
   cls.proc=subprocess.Popen(['java','-cp',str(build),'com.lanftp.ServerHarness',str(cls.root)],stdin=subprocess.PIPE,stdout=subprocess.PIPE,text=True)
-  cls.port=int(cls.proc.stdout.readline())
+  cls.port=int(cls.proc.stdout.readline().split()[0])
  @classmethod
  def tearDownClass(cls):
   cls.proc.stdin.write('\n');cls.proc.stdin.flush();cls.proc.wait(timeout=10);cls.proc.stdin.close();cls.proc.stdout.close();cls.temp.cleanup()
