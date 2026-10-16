@@ -32,6 +32,26 @@ public final class SmbServer implements Closeable {
       new ThreadPoolExecutor(0, 8, 60, TimeUnit.SECONDS, new SynchronousQueue<Runnable>());
   private final Set<Handle> allHandles = ConcurrentHashMap.newKeySet();
   private volatile boolean running = true;
+  private final ArrayDeque<String> events = new ArrayDeque<>();
+
+  private synchronized void record(String event) {
+    if (events.size() == 32) events.removeFirst();
+    events.addLast(event);
+  }
+
+  public synchronized String diagnostics() {
+    return events.isEmpty() ? "尚无 SMB 请求" : String.join("\n", events);
+  }
+
+  private static long fileIndex(String path) {
+    // One identity for enumeration and every metadata query, including nested paths.
+    long value = 0xcbf29ce484222325L;
+    for (byte b : path.getBytes(StandardCharsets.UTF_8)) {
+      value ^= b & 255;
+      value *= 0x100000001b3L;
+    }
+    return value == 0 ? 1 : value;
+  }
 
   public SmbServer(FtpServer.Vfs fs, String user, String password, int port, AccessPolicy policy)
       throws IOException {
@@ -265,7 +285,12 @@ public final class SmbServer implements Closeable {
             if (related && relatedFailed) {
               r =
                   new Reply(
-                      allocate(8).putShort((short) 9).putShort((short) 0).putInt(0).array(),
+                      allocate(9)
+                          .putShort((short) 9)
+                          .putShort((short) 0)
+                          .putInt(0)
+                          .put((byte) 0)
+                          .array(),
                       lastTree,
                       sessionId);
               r.status = 0xc0000008;
@@ -298,6 +323,7 @@ public final class SmbServer implements Closeable {
           if (failures >= 5 || loggedOff) break;
         }
       } catch (IOException | RuntimeException ignored) {
+        if (running) record("连接结束：" + ignored.getClass().getSimpleName());
       } finally {
         for (Handle h : new ArrayList<>(handles.values())) closeQuietly(h);
         handles.clear();
@@ -509,7 +535,15 @@ public final class SmbServer implements Closeable {
         reply.status = INVALID;
       }
       if (reply.status != 0 && reply.bytes.length == 0)
-        reply.bytes = allocate(8).putShort((short) 9).putShort((short) 0).putInt(0).array();
+        reply.bytes =
+            allocate(9).putShort((short) 9).putShort((short) 0).putInt(0).put((byte) 0).array();
+      if (command == 14 || command == 16 || reply.status != 0) {
+        int cls =
+            request.length > 67 && (command == 14 || command == 16)
+                ? request[command == 14 ? 66 : 67] & 255
+                : -1;
+        record(String.format(Locale.ROOT, "命令=%d 类型=%d 状态=0x%08x", command, cls, reply.status));
+      }
       return reply;
     }
 
@@ -856,7 +890,7 @@ public final class SmbServer implements Closeable {
       int length = 0;
       while (h.cursor < h.listing.size()) {
         FtpServer.Entry e = h.listing.get(h.cursor);
-        byte[] record = directoryEntry(cls, e, h.cursor + 1);
+        byte[] record = directoryEntry(cls, e, h.cursor + 1, FtpServer.normalize(h.path, e.name));
         int padded = (record.length + 7) & ~7;
         if (length + padded > max) {
           if (records.isEmpty()) throw new SmbException(0xc0000023);
@@ -877,7 +911,7 @@ public final class SmbServer implements Closeable {
           allocate(8).putShort((short) 9).putShort((short) 72).putInt(data.length).array(), data);
     }
 
-    byte[] directoryEntry(int cls, FtpServer.Entry e, int index) throws IOException {
+    byte[] directoryEntry(int cls, FtpServer.Entry e, int index, String path) throws IOException {
       byte[] name = utf16(e.name);
       int prefix;
       switch (cls) {
@@ -899,6 +933,12 @@ public final class SmbServer implements Closeable {
         case 38:
           prefix = 80;
           break;
+        case 60:
+          prefix = 88;
+          break;
+        case 63:
+          prefix = 114;
+          break;
         default:
           throw new SmbException(UNSUPPORTED);
       }
@@ -915,8 +955,9 @@ public final class SmbServer implements Closeable {
             .putLong(allocation(e.size))
             .putInt(attributes(e))
             .putInt(name.length);
-        if (cls == 37) b.putLong(96, (long) e.name.hashCode() & 0xffffffffL);
-        if (cls == 38) b.putLong(72, (long) e.name.hashCode() & 0xffffffffL);
+        if (cls == 37) b.putLong(96, fileIndex(path));
+        if (cls == 38) b.putLong(72, fileIndex(path));
+        if (cls == 60 || cls == 63) b.putLong(72, fileIndex(path)).putLong(80, 0);
       }
       b.position(prefix);
       b.put(name);
@@ -986,7 +1027,7 @@ public final class SmbServer implements Closeable {
 
     byte[] fileInfo(int cls, Handle h, FtpServer.Entry e) throws IOException {
       byte[] name = utf16(h.path.replace('/', '\\'));
-      long index = (h.path.hashCode() & 0xffffffffL) | 1;
+      long index = fileIndex(h.path);
       switch (cls) {
         case 4:
           return basic(e);
@@ -996,6 +1037,14 @@ public final class SmbServer implements Closeable {
           return allocate(8).putLong(index).array();
         case 7:
           return new byte[4];
+        case 8:
+          return allocate(4).putInt(h.desired).array();
+        case 17:
+          return new byte[4];
+        case 28:
+          return allocate(16).putLong(e.size).putShort((short) 0).array();
+        case 59:
+          return allocate(24).putLong(1).putLong(index).putLong(0).array();
         case 9:
         case 48:
           return Ntlm.join(allocate(4).putInt(name.length).array(), name);

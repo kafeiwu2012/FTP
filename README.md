@@ -1,8 +1,10 @@
-# 局域网文件共享 2.0 / LAN FTP + SMB2
+# 局域网文件共享 2.1 / LAN FTP + SMB2
 
 Android 8.0（API 26）及以上的本地文件服务器。手机通过系统文件夹选择器授权一个共享目录，局域网内的设备可使用 FTP 或 SMB2 浏览、下载；可选开启上传、覆盖、删除和匿名访问。应用不申请 Root，不使用云端文件服务。
 
-**[下载 Android APK 2.0](https://github.com/kafeiwu2012/FTP/raw/refs/heads/main/downloads/LanFTP-2.0.apk)** · [校验文件](downloads/SHA256SUMS)
+**[下载 Android APK 2.1](https://github.com/kafeiwu2012/FTP/raw/refs/heads/main/downloads/LanFTP-2.1.apk)** · [校验文件](downloads/SHA256SUMS)
+
+2.1 修正 SMB 错误响应长度，以及目录枚举和属性查询中文件标识不一致的问题；补充扩展目录格式和文件属性查询。新增“连接诊断”，显示启动时目录读取项数与最近 SMB 命令、类型、状态码，不记录文件名、账号或密码。主机回归通过不代表 iPad 真机已验证。若进入 share 仍显示“内容不可用”，请在手机点“连接诊断 → 复制诊断”反馈。
 
 ## 安装、授权与权限开关
 
@@ -63,7 +65,7 @@ export ANDROID_HOME=/path/to/android-sdk
 ./gradlew --no-daemon --max-workers=2 :app:assembleDebug :app:lintDebug
 ```
 
-调试 APK 自动签名：`app/build/outputs/apk/debug/app-debug.apk`。Release：`:app:assembleRelease`，生成未签名包后使用自己的安全保管的签名密钥签署。云环境可使用 `./scripts/cloud-build.sh` 激活保留的工具及受信代理 CA，使用 `./scripts/sign-local.sh 2.0` 签名。
+调试 APK 自动签名：`app/build/outputs/apk/debug/app-debug.apk`。Release：`:app:assembleRelease`，生成未签名包后使用自己的安全保管的签名密钥签署。云环境可使用 `./scripts/cloud-build.sh` 激活保留的工具及受信代理 CA，使用 `./scripts/sign-local.sh 2.1` 签名。
 
 签名私钥保存在云环境仓库外，未进入源码或下载目录。后续更新需使用同一密钥。Gradle 下载保留官方校验值，TLS 校验保持开启。
 
@@ -77,7 +79,7 @@ python3 -m venv /tmp/lanftp-tests
 ./gradlew --no-daemon --max-workers=2 :app:lintDebug
 ```
 
-12 项 FTP 回归测试与 14 项跨协议功能测试使用生产 Java 引擎，测试后端为带边界检查的临时本地目录。共享测试使用 smbprotocol 和 Impacket 两套独立 SMB 实现，覆盖中文读写、签名认证及篡改拒绝、FTP/SMB 交叉传输校验、随机写入/截断、重命名、删除、空目录约束、匿名关闭/只读/可写、错误密码不降级匿名、共享枚举、越界/符号链接拦截和未登录请求。
+12 项 FTP 回归测试与 15 项跨协议功能测试使用生产 Java 引擎，测试后端为带边界检查的临时本地目录。共享测试使用 smbprotocol 和 Impacket 两套独立 SMB 实现，覆盖中文读写、签名认证及篡改拒绝、FTP/SMB 交叉传输校验、随机写入/截断、重命名、删除、空目录约束、匿名关闭/只读/可写、错误密码不降级匿名、共享枚举、越界/符号链接拦截和未登录请求。
 
 真机验收：授权本地目录，分别测试账号只读、账号可写、匿名只读、匿名可写；核对 Windows/iPad 与手机文件内容及大小；确认删除只影响共享目录；检查实际 SMB 端口；熄屏后传输并验证停止服务后不可连接。文档提供器的能力与 iPad 原生客户端兼容性不能由主机协议测试替代。
 

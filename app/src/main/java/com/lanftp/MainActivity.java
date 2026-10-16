@@ -135,6 +135,24 @@ public final class MainActivity extends Activity {
     root.addView(address);
     smbState = text("SMB 尚未启动", 13, muted);
     root.addView(smbState);
+    Button diagnostics = button("连接诊断");
+    root.addView(diagnostics);
+    diagnostics.setOnClickListener(
+        v -> {
+          String report = FtpService.diagnostics();
+          new AlertDialog.Builder(this)
+              .setTitle("连接诊断")
+              .setMessage(report)
+              .setPositiveButton("关闭", null)
+              .setNeutralButton(
+                  "复制诊断",
+                  (dialog, which) -> {
+                    ((ClipboardManager) getSystemService(CLIPBOARD_SERVICE))
+                        .setPrimaryClip(ClipData.newPlainText("连接诊断", report));
+                    toast("已复制诊断");
+                  })
+              .show();
+        });
     Button copy = button("复制连接地址");
     root.addView(copy);
     copy.setOnClickListener(

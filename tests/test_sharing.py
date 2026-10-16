@@ -40,6 +40,36 @@ class SharingTests(unittest.TestCase):
   subprocess.run(['javac','-encoding','UTF-8','-d',str(BUILD),*[str(source/(n+'.java')) for n in ['AccessPolicy','FtpServer','Ntlm','RpcPipe','SmbServer']],str(REPO/'tests/LocalFileSystem.java'),str(REPO/'tests/ServerHarness.java')],check=True)
  @classmethod
  def tearDownClass(cls):cls.build.cleanup()
+ def test_directory_formats_identity_and_end_error(self):
+  with server() as (root,ftp,port):
+   (root/'nested').mkdir();(root/'nested'/'你好.txt').write_text('nested')
+   c=smb_login(port)
+   try:
+    tree=c.connectTree('share');raw=c.getSMBServer()
+    for parent in ['', 'nested']:
+     ids=[]
+     for cls,prefix,id_offset in [(1,64,None),(2,68,None),(3,94,None),(12,12,None),(37,104,96),(38,80,72),(60,88,72),(63,114,72)]:
+      handle=c.openFile(tree,parent,desiredAccess=0x120089,shareMode=7,creationOption=1,creationDisposition=1)
+      try:
+       data=raw.queryDirectory(tree,handle,searchString='你好.txt',informationClass=cls)
+       length=struct.unpack_from('<I',data,8 if cls==12 else 60)[0]
+       self.assertEqual(data[prefix:prefix+length].decode('utf-16le'),'你好.txt')
+       if id_offset is not None:ids.append(struct.unpack_from('<Q',data,id_offset)[0])
+       try:raw.queryDirectory(tree,handle,informationClass=cls);self.fail('Expected end of enumeration')
+       except Exception as error:
+        self.assertEqual(error.get_error_code(),0x80000006)
+        body=error.get_error_packet()['Data'];self.assertGreaterEqual(len(body),9)
+        self.assertEqual(struct.unpack_from('<HBBI',body),(9,0,0,0))
+      finally:c.closeFile(tree,handle)
+     file=c.openFile(tree,(parent+'/' if parent else '')+'你好.txt',desiredAccess=0x120089,shareMode=7)
+     try:
+      index=struct.unpack('<Q',raw.queryInfo(tree,file,fileInfoClass=6))[0]
+      self.assertTrue(all(x==index for x in ids))
+      identity=raw.queryInfo(tree,file,fileInfoClass=59);self.assertEqual(len(identity),24)
+      self.assertEqual(struct.unpack_from('<Q',identity,8)[0],index)
+      for cls,size in [(8,4),(17,4),(28,16)]:self.assertEqual(len(raw.queryInfo(tree,file,fileInfoClass=cls)),size)
+     finally:c.closeFile(tree,file)
+   finally:c.close()
  def test_account_upload_random_write_and_cross_protocol_read(self):
   with server(write=True) as (root,ftp,port):
    payload=os.urandom(250000)

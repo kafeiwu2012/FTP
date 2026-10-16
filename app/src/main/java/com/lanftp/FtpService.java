@@ -17,6 +17,21 @@ public final class FtpService extends Service {
   public static volatile boolean activeSmbEnabled = true;
   public static volatile AccessPolicy activePolicy = AccessPolicy.READ_ONLY;
   public static volatile String status = "服务器已停止", smbStatus = "SMB 未启动";
+  public static volatile String folderStatus = "尚未检查共享目录";
+  private static volatile SmbServer diagnosticServer;
+
+  public static String diagnostics() {
+    SmbServer server = diagnosticServer;
+    return "版本 2.1\n"
+        + status
+        + "\n"
+        + folderStatus
+        + "\n"
+        + smbStatus
+        + "\n\n"
+        + (server == null ? "尚无 SMB 诊断" : server.diagnostics());
+  }
+
   private FtpServer ftp;
   private SmbServer smb;
   private PowerManager.WakeLock wake;
@@ -100,6 +115,8 @@ public final class FtpService extends Service {
       startForeground(1, notification("正在启动…"), ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC);
     else startForeground(1, notification("正在启动…"));
     status = "正在启动…";
+    folderStatus = "正在检查共享目录";
+    diagnosticServer = null;
     smbStatus = "SMB 正在准备…";
     String folder = intent.getStringExtra("folder"),
         user = intent.getStringExtra("user"),
@@ -135,6 +152,13 @@ public final class FtpService extends Service {
                   throw new IllegalArgumentException("请重新选择文件夹，并允许所需的读写授权");
                 SafFileSystem fs = new SafFileSystem(getContentResolver(), tree);
                 if (!fs.stat("/").directory) throw new IllegalArgumentException("请选择文件夹");
+                try {
+                  int count = fs.list("/").size();
+                  folderStatus = "启动时目录读取成功：" + count + " 项";
+                } catch (java.io.IOException | SecurityException e) {
+                  folderStatus = "目录读取失败，请重新选择文件夹并授权";
+                  throw new IllegalArgumentException(folderStatus);
+                }
                 if (policy.writable && !fs.canCreate())
                   throw new IllegalArgumentException("所选文件夹不支持写入，请选择可写的本地目录");
                 synchronized (lock) {
@@ -160,6 +184,7 @@ public final class FtpService extends Service {
                     }
                     if (smb != null) {
                       activeSmbPort = smb.port();
+                      diagnosticServer = smb;
                       smb.start();
                     }
                   } else smbStatus = "SMB 已关闭";
