@@ -2,6 +2,8 @@
 
 Android 8.0（API 26）及以上的本地只读 FTP 服务器。通过 Android 系统文件夹选择器授权，局域网内的 Windows、iPad 等终端可以浏览、下载手机文件。无需账号注册或云端服务。
 
+[下载 Android APK](https://github.com/kafeiwu2012/FTP/raw/refs/heads/main/downloads/LanFTP-1.0.apk) · [SHA-256 校验](downloads/SHA256SUMS)
+
 ## 安装和使用
 
 1. 将 `LanFTP-1.0.apk` 复制到安卓手机，允许对应安装来源“安装未知应用”，完成安装。
