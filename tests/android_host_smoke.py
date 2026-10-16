@@ -6,6 +6,7 @@ No device Root, fabricated document grants, or changes to other directories are 
 """
 import ftplib, hashlib, io, os, pathlib, socket, subprocess, time
 from impacket.smbconnection import SMBConnection, SessionError
+from test_web import request
 
 ADB=os.environ.get('ADB','/workspace/tools/android-sdk/platform-tools/adb')
 SERIAL=os.environ.get('ANDROID_TEST_SERIAL','emulator-5554')
@@ -58,7 +59,18 @@ def main():
   except ftplib.error_perm:pass
   else:raise AssertionError('Anonymous FTP write was not denied')
  print('PASS: anonymous reads allowed; anonymous writes denied on actual Android service',flush=True)
- print('Payload SHA-256:',hashlib.sha256(payload).hexdigest(),flush=True)
+ web_port=forward(int(fields['web']))
+ assert request(web_port,route='/api/list',path='/',auth=None)[0]==200
+ assert request(web_port,'PUT','/api/file','/anonymous-denied.txt',b'bad',auth=None)[0]==403
+ assert request(web_port,'PUT','/api/file','/你好.txt',payload,overwrite=True)[0]==200
+ with ftp_login(ftp_port) as f:
+  out=io.BytesIO();f.retrbinary('RETR 你好.txt',out.write);assert out.getvalue()==payload
+ assert request(web_port,route='/api/file',path='/你好.txt',headers={'Range':'bytes=100-200'})[2]==payload[100:201]
+ print('PASS: actual SAF browser upload, FTP cross-read, range download and anonymous write denial',flush=True)
+ if os.environ.get('BROWSER_SMOKE')=='1':
+  subprocess.run(['node',str(pathlib.Path(__file__).with_name('browser_smoke.js')),str(web_port)],check=True,timeout=240)
+ assert request(web_port,'DELETE','/api/file','/你好.txt')[0]==200
+ print('Payload SHA-256:' ,hashlib.sha256(payload).hexdigest(),flush=True)
  command('shell','run-as','com.lanftp','touch','files/smoke-stop')
  deadline=time.monotonic()+30
  while time.monotonic()<deadline:

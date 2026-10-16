@@ -329,7 +329,9 @@ public final class SmbServer implements Closeable {
               r.status = 0xc0000008;
             } else {
               r = dispatch(request);
-              relatedFailed = r.status != 0;
+              int command = u16(request, 12);
+              // A failed metadata query must not prevent CLOSE from releasing the created handle.
+              relatedFailed = r.status != 0 && (command == 1 || command == 3 || command == 5);
             }
             requests.add(request);
             responses.add(r);
@@ -377,11 +379,11 @@ public final class SmbServer implements Closeable {
       ByteBuffer b = buf(result);
       b.putInt(0x424d53fe)
           .putShort((short) 64)
-          .putShort((short) 1)
+          .putShort((short) u16(request, 6))
           .putInt(reply.status)
           .putShort((short) u16(request, 12))
           .putShort((short) 32)
-          .putInt(1)
+          .putInt(1 | (i32(request, 16) & 4))
           .putInt(next)
           .putLong(i64(request, 24))
           .putInt(i32(request, 32))
@@ -397,8 +399,8 @@ public final class SmbServer implements Closeable {
       long sid = i64(request, 40);
       boolean related = (i32(request, 16) & 4) != 0;
       if (related) {
-        if (tree == -1) tree = lastTree;
-        if (sid == -1) sid = sessionId;
+        tree = lastTree;
+        sid = sessionId;
       }
       Reply reply = new Reply(new byte[0], tree, sid);
       try {
@@ -570,6 +572,7 @@ public final class SmbServer implements Closeable {
       if (reply.status != 0 && reply.bytes.length == 0)
         reply.bytes =
             allocate(9).putShort((short) 9).putShort((short) 0).putInt(0).put((byte) 0).array();
+      if (reply.status == 0) lastTree = reply.tree;
       commands.incrementAndGet();
       if (command == 14) directoryQueries.incrementAndGet();
       {

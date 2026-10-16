@@ -4,7 +4,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 build_tools="${ANDROID_HOME:-/workspace/tools/android-sdk}/build-tools/35.0.0"
 signing_dir="${LANFTP_SIGNING_DIR:-/workspace/tools/signing}"
-version="${1:-2.2}"
+version="${1:-3.0}"
 [[ "$version" =~ ^[0-9]+(\.[0-9]+){1,2}$ ]] || { echo "Invalid version" >&2; exit 1; }
 mkdir -p dist
 "$build_tools/zipalign" -f -p 4 app/build/outputs/apk/release/app-release-unsigned.apk dist/LanFTP-aligned.apk

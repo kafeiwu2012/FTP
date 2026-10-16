@@ -44,7 +44,7 @@ public final class SmokeInstrumentation extends Instrumentation {
       // real.
       clickSystem("USE THIS FOLDER");
       clickSystem("ALLOW");
-      long deadline = SystemClock.elapsedRealtime() + 60000;
+      long deadline = SystemClock.elapsedRealtime() + 180000;
       while (!getTargetContext().getContentResolver().getPersistedUriPermissions().stream()
           .anyMatch(p -> p.isWritePermission() && p.getUri().toString().contains("LanFTPTest"))) {
         if (SystemClock.elapsedRealtime() > deadline)
@@ -68,7 +68,7 @@ public final class SmokeInstrumentation extends Instrumentation {
             flags.get(3).setChecked(true);
             button("启动文件共享").performClick();
           });
-      deadline = SystemClock.elapsedRealtime() + 60000;
+      deadline = SystemClock.elapsedRealtime() + 180000;
       while (!FtpService.running) {
         if (FtpService.status.startsWith("启动失败") || SystemClock.elapsedRealtime() > deadline)
           throw new IOException(FtpService.status);
@@ -80,6 +80,8 @@ public final class SmokeInstrumentation extends Instrumentation {
               + android.os.Process.myUid()
               + "\nftp="
               + FtpService.activePort
+              + "\nweb="
+              + FtpService.activeWebPort
               + "\nsmb="
               + FtpService.activeSmbPort
               + "\n"
@@ -92,7 +94,7 @@ public final class SmokeInstrumentation extends Instrumentation {
         writer.write(ready);
       }
       // Host clients exercise TCP protocols while the ordinary app UID owns the foreground service.
-      deadline = SystemClock.elapsedRealtime() + 240000;
+      deadline = SystemClock.elapsedRealtime() + 1800000;
       while (!stop.exists() && SystemClock.elapsedRealtime() < deadline) SystemClock.sleep(250);
       getTargetContext().stopService(new Intent(getTargetContext(), FtpService.class));
       result.putString(
@@ -107,9 +109,21 @@ public final class SmokeInstrumentation extends Instrumentation {
   }
 
   private void clickSystem(String text) throws Exception {
-    long deadline = SystemClock.elapsedRealtime() + 60000;
+    long deadline = SystemClock.elapsedRealtime() + 180000;
     while (SystemClock.elapsedRealtime() < deadline) {
       AccessibilityNodeInfo root = getUiAutomation().getRootInActiveWindow();
+      if (root != null) {
+        // Software-only emulation can show a system-server ANR during cold boot.
+        // Explicitly choose Wait; never dismiss or hide an application failure.
+        if (!root.findAccessibilityNodeInfosByText("Process system isn't responding").isEmpty()
+            || !root.findAccessibilityNodeInfosByText("System UI isn't responding").isEmpty()) {
+          for (AccessibilityNodeInfo wait : root.findAccessibilityNodeInfosByText("Wait"))
+            if ("Wait".contentEquals(wait.getText()))
+              wait.performAction(AccessibilityNodeInfo.ACTION_CLICK);
+          SystemClock.sleep(500);
+          continue;
+        }
+      }
       if (root != null)
         for (AccessibilityNodeInfo node : root.findAccessibilityNodeInfosByText(text))
           if (text.contentEquals(node.getText() == null ? "" : node.getText())) {

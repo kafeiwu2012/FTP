@@ -37,9 +37,49 @@ class SharingTests(unittest.TestCase):
   global BUILD
   cls.build=tempfile.TemporaryDirectory();BUILD=pathlib.Path(cls.build.name)
   source=REPO/'app/src/main/java/com/lanftp'
-  subprocess.run(['javac','-encoding','UTF-8','-d',str(BUILD),*[str(source/(n+'.java')) for n in ['AccessPolicy','FtpServer','Ntlm','RpcPipe','SmbServer']],str(REPO/'tests/LocalFileSystem.java'),str(REPO/'tests/ServerHarness.java')],check=True)
+  subprocess.run(['javac','-encoding','UTF-8','-d',str(BUILD),*[str(source/(n+'.java')) for n in ['AccessPolicy','FtpServer','Ntlm','RpcPipe','SmbServer','WebServer','WebUi']],str(REPO/'tests/LocalFileSystem.java'),str(REPO/'tests/ServerHarness.java')],check=True)
  @classmethod
  def tearDownClass(cls):cls.build.cleanup()
+ def test_related_compound_inherits_tree_and_closes_after_query_error(self):
+  from smbprotocol.open import Open,SMB2QueryInfoRequest,SMB2QueryInfoResponse,SMB2QueryDirectoryRequest
+  from smbprotocol.tree import TreeConnect
+  with server() as (root,ftp,port):
+   (root/'empty-dir').mkdir();cache={}
+   session=smbclient.register_session('127.0.0.1',port=port,username='tester',password='test-password',require_signing=True,auth_protocol='ntlm',connection_cache=cache)
+   tree=TreeConnect(session,r'\\127.0.0.1\share');tree.connect();conn=session.connection
+   original=conn.transport.send
+   def inherited_headers(data):
+    data=bytearray(data);pos=0
+    while pos<len(data):
+     next=struct.unpack_from('<I',data,pos+20)[0];end=pos+next if next else len(data)
+     if struct.unpack_from('<I',data,pos+16)[0]&4:
+      struct.pack_into('<I',data,pos+36,0xffffffff);struct.pack_into('<Q',data,pos+40,0xffffffffffffffff)
+      data[pos+48:pos+64]=bytes(16)
+      mid=struct.unpack_from('<Q',data,pos+24)[0];command=struct.unpack_from('<H',data,pos+12)[0]
+      data[pos+48:pos+64]=conn._generate_signature(bytes(data[pos:end]),session.signing_key,mid,False,command)
+     if not next:break
+     pos=end
+    return original(bytes(data))
+   try:
+    for path,empty in [('',False),('empty-dir',True)]:
+     fd=Open(tree,path);create,created=fd.create(2,0x120089,0x10,7,1,1,send=False)
+     if empty:
+      query=SMB2QueryDirectoryRequest();query['file_information_class']=37;query['flags']=1;query['file_id']=b'\xff'*16;query['output_buffer_length']=65536;query['buffer']='*'.encode('utf-16le')
+     else:
+      query=SMB2QueryInfoRequest();query['info_type']=2;query['file_info_class']=5;query['output_buffer_length']=65536;query['file_id']=b'\xff'*16
+     close,closed=fd.close(send=False)
+     conn.transport.send=inherited_headers
+     try:pending=conn.send_compound([create,query,close],session.session_id,tree.tree_connect_id,related=True)
+     finally:conn.transport.send=original
+     created(pending[0])
+     if empty:
+      with self.assertRaises(SMBResponseException) as cm:conn.receive(pending[1])
+      self.assertEqual(cm.exception.status,0x80000006)
+     else:
+      result=conn.receive(pending[1]);self.assertTrue(result['flags'].get_value()&4)
+      body=SMB2QueryInfoResponse();body.unpack(result['data'].get_value());self.assertEqual(struct.unpack_from('<I',body['buffer'].get_value(),0)[0],6)
+     closed(pending[2]);self.assertFalse(fd._connected)
+   finally:smbclient.reset_connection_cache(connection_cache=cache)
  def test_diagnostics_capture_transport_and_successful_commands(self):
   import base64
   with tempfile.TemporaryDirectory() as d:

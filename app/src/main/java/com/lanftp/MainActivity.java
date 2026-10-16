@@ -120,21 +120,38 @@ public final class MainActivity extends Activity {
     root.setPadding(dp(24), dp(28), dp(24), dp(28));
     scroll.addView(root);
     setContentView(scroll);
-    root.addView(text("LAN / FILE SHARING", 12, blue));
+    root.addView(text("LAN / FILE SHARING · 3.0", 12, blue));
     TextView title = text("把手机文件，\n留在你的局域网。", 30, ink);
     title.setTypeface(null, Typeface.BOLD);
     root.addView(title);
-    root.addView(text("FTP + SMB2 · 手机本地文件共享", 14, muted));
+    root.addView(text("网页 + FTP + SMB2 · 手机本地文件共享", 14, muted));
     state = text("服务器已停止", 17, blue);
     state.setTypeface(null, Typeface.BOLD);
     root.addView(state);
-    address = text("启动后显示 FTP / SMB 连接地址", 18, ink);
+    address = text("启动后显示网页 / FTP / SMB 地址", 16, ink);
     address.setTextIsSelectable(true);
     address.setPadding(dp(16), dp(16), dp(16), dp(16));
     address.setBackground(background(Color.WHITE, 12));
     root.addView(address);
     smbState = text("SMB 尚未启动", 13, muted);
     root.addView(smbState);
+    Button browser = button("在本机预览共享文件");
+    root.addView(browser);
+    browser.setOnClickListener(
+        v -> {
+          if (!FtpService.running || FtpService.activeWebPort == 0) {
+            toast("请先启动共享");
+            return;
+          }
+          try {
+            startActivity(
+                new Intent(
+                    Intent.ACTION_VIEW, Uri.parse("http://127.0.0.1:" + FtpService.activeWebPort)));
+          } catch (ActivityNotFoundException e) {
+            toast("请在其他设备的浏览器输入上方网页地址");
+          }
+        });
+    root.addView(text("iPad：在 Safari 输入网页地址，即可浏览、下载和按权限上传、删除。", 13, muted));
     Button diagnostics = button("连接诊断");
     root.addView(diagnostics);
     diagnostics.setOnClickListener(
@@ -166,15 +183,18 @@ public final class MainActivity extends Activity {
             toast("未发现局域网地址");
             return;
           }
-          String ip = ips.get(0);
           java.util.List<String> options = new java.util.ArrayList<>();
-          options.add("ftp://" + ip + ":" + FtpService.activePort);
-          if (FtpService.activeSmbPort != 0)
-            options.add(
-                "smb://"
-                    + ip
-                    + (FtpService.activeSmbPort == 445 ? "" : ":" + FtpService.activeSmbPort)
-                    + "/share");
+          for (String ip : ips) {
+            if (FtpService.activeWebPort != 0)
+              options.add("http://" + ip + ":" + FtpService.activeWebPort);
+            options.add("ftp://" + ip + ":" + FtpService.activePort);
+            if (FtpService.activeSmbPort != 0)
+              options.add(
+                  "smb://"
+                      + ip
+                      + (FtpService.activeSmbPort == 445 ? "" : ":" + FtpService.activeSmbPort)
+                      + "/share");
+          }
           new AlertDialog.Builder(this)
               .setTitle("选择要复制的连接地址")
               .setItems(
@@ -238,8 +258,7 @@ public final class MainActivity extends Activity {
             getPreferences(0).getString("port", "2121"),
             InputType.TYPE_CLASS_NUMBER);
     smbEnabled =
-        toggle(
-            root, "同时启用 SMB2（供 iPad 文件 App 连接）", getPreferences(0).getBoolean("smbEnabled", true));
+        toggle(root, "同时启用 SMB2（支持 SMB 的客户端使用）", getPreferences(0).getBoolean("smbEnabled", true));
     smbPort =
         field(
             root,
@@ -263,17 +282,18 @@ public final class MainActivity extends Activity {
     root.addView(
         text(
             "手机与电脑 / iPad 连接同一个 Wi-Fi，或让其他设备连接手机热点。\n\n"
-                + "iPad：文件 → 浏览 → 右上角菜单 → 连接服务器，输入上方 smb:// 地址（共享名"
-                + " share），选择注册用户并填写账号密码；开启匿名访问后也可尝试选择客人。\n\n"
-                + "Windows：SMB 使用文件资源管理器，输入 \\\\手机IP\\share；FTP 使用上方 ftp:// 地址或 FileZilla。高位 SMB"
-                + " 端口可使用支持自定义端口的客户端。\n\n"
-                + "免 Root 模式会尝试 445；若系统禁止，自动改用高位端口。iPad“文件”App 的高位端口与来宾访问兼容性需按实际系统验证；连接失败时，可改用支持"
-                + " FTP/自定义 SMB 端口的客户端，或局域网内的 445 端口转发设备。应用不会请求 Root。",
+                + "iPad / Windows 浏览器：输入上方 http:// 网页地址，浏览并下载文件；开启写入权限后可上传、覆盖、删除。下载后可保存到 iPad 的文件"
+                + " App。网页无需安装其他软件。\n\n"
+                + "账号：未开启匿名访问时，浏览器会要求填写手机界面中的账号密码。匿名只读时，可点击网页的账号登录使用账号写入权限。\n\n"
+                + "FTP：使用 FileZilla 或支持 FTP 的文件管理器。SMB：Windows 默认使用"
+                + " \\\\手机IP\\share；高位端口需要支持自定义端口的客户端。\n\n"
+                + "免 Root 手机可能无法监听 SMB 的 445 端口；高位端口不能保证兼容 iPad 原生文件 App，建议优先使用 Safari 网页。应用不会请求"
+                + " Root。",
             14,
             muted));
     root.addView(
         text(
-            "仅在可信局域网使用：FTP 明文传输，SMB2 也不提供文件内容加密，请勿设置路由器端口映射。Android"
+            "仅在可信局域网使用：网页与 FTP 明文传输，SMB2 也不提供文件内容加密，请勿设置路由器端口映射。Android"
                 + " 只允许访问你授权的文件夹；部分系统禁止选择存储根目录、Android/data 等目录。\n\n"
                 + "关闭共享可停止文件访问。系统省电策略可能暂停连接；Android 15 长时间后台传输可能在约 6 小时后停止，需要手动重新启动。",
             12,

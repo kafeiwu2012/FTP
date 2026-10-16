@@ -15,7 +15,11 @@ public class ServerHarness {
     ftp.start();
     SmbServer smb = new SmbServer(fs, "tester", "test-password", 0, policy);
     smb.start();
-    System.out.println(ftp.port() + " " + smb.port());
+    WebServer web = new WebServer(fs, "tester", "test-password", 0, policy);
+    web.start();
+    if (args.length > 4) {
+      System.out.println(ftp.port() + " " + smb.port() + " " + web.port());
+    } else System.out.println(ftp.port() + " " + smb.port());
     System.out.flush();
     int command;
     while ((command = System.in.read()) >= 0) {
@@ -29,5 +33,6 @@ public class ServerHarness {
     }
     ftp.close();
     smb.close();
+    web.close();
   }
 }

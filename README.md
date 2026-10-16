@@ -1,95 +1,95 @@
-# 局域网文件共享 2.2 / LAN FTP + SMB2
+# 局域网文件共享 3.0
 
-Android 8.0（API 26）及以上的本地文件服务器。手机通过系统文件夹选择器授权一个共享目录，局域网内的设备可使用 FTP 或 SMB2 浏览、下载；可选开启上传、覆盖、删除和匿名访问。应用不申请 Root，不使用云端文件服务。
+Android 8.0 及以上的本地文件服务器：共享手机已授权的文件夹，让同一局域网内的 Windows、iPad 等设备浏览、下载，并按权限上传、覆盖、删除。支持账号和匿名访问，无需 Root，不上传云端。
 
-**[下载 Android APK 2.2](https://github.com/kafeiwu2012/FTP/raw/refs/heads/main/downloads/LanFTP-2.2.apk)** · [校验文件](downloads/SHA256SUMS)
+**[下载 Android APK 3.0](https://github.com/kafeiwu2012/FTP/raw/refs/heads/main/downloads/LanFTP-3.0.apk)** · [源码压缩包](downloads/LanFTP-3.0-source.zip) · [SHA-256 校验](downloads/SHA256SUMS)
 
-2.2 补充诊断：显示实际监听端口、累计 TCP 连接数、帧数、SMB 命令数和目录请求数，并记录正常命令及协商前的连接失败。2.1 的“尚无 SMB 请求”仅表示没有符合筛选条件的事件，不能据此断定没有 TCP 连接。此版用于定位 iPad 进入 share 后失败的阶段，尚未确认解决该真机问题。
+## 安装与使用
 
-2.1 修正 SMB 错误响应长度，以及目录枚举和属性查询中文件标识不一致的问题；补充扩展目录格式和文件属性查询。新增“连接诊断”，显示启动时目录读取项数与最近 SMB 命令、类型、状态码，不记录文件名、账号或密码。主机回归通过不代表 iPad 真机已验证。若进入 share 仍显示“内容不可用”，请在手机点“连接诊断 → 复制诊断”反馈。
+1. 覆盖安装 APK，与 1.x / 2.x 保持同一应用 ID 和发布签名。
+2. 选择手机上的共享文件夹，在系统选择器中允许访问。旧版本若只有读取授权，开启写入前需要重新选择并授权。
+3. 设置账号密码，按需打开权限开关，点击“启动文件共享”。
+4. 手机与另一台设备连接同一 Wi-Fi，或让另一台设备连接手机热点。在 **iPad Safari 或 Windows 浏览器输入手机显示的 `http://` 网页地址**，例如 `http://192.168.1.20:8080`。
+5. 未开启匿名访问时，浏览器要求输入手机界面的账号密码。匿名只读时，可点击网页“账号登录”使用账号的写入权限。
+6. 浏览文件夹，点击文件下载；写入权限开启后，网页显示上传、新建文件夹、删除按钮。覆盖前必须确认。iPad 可从 Safari 下载列表将文件保存到“文件”App。
+7. 用完点击“停止共享”，或从前台通知中停止。权限修改需要停止后重新启动。
 
-## 安装、授权与权限开关
+手机主界面的“在本机预览共享文件”可先确认目录内容；“复制连接地址”提供全部网络接口的网页、FTP 和 SMB 地址。优先显示 Wi-Fi／热点地址；若该地址不可达，可从复制菜单选择同一局域网的另一个地址。地址随当前网络变化，以手机实际显示为准。
 
-1. 安装 APK；与 1.0 使用相同应用 ID 和签名，可直接覆盖升级。
-2. 打开“局域网文件共享”，选择本地共享文件夹并授权。**从 1.0 升级的旧目录只有读取权限，开启写入前需重新选择并授予写权限。**
-3. 设置账号密码。密码至少 8 位；用户名不能是保留的 `guest` / `anonymous`。账号密码同时用于 FTP 和 SMB。
-4. 按需设置以下三个开关，默认都关闭：
+## 权限
+
+网页、FTP、SMB 使用同一份授权目录和权限，不会因为更换协议而扩大写入权限。
 
 | 开关 | 效果 |
 | --- | --- |
-| 允许账号用户上传、覆盖、删除 | 账号用户可修改共享目录，关闭时只读 |
-| 允许匿名 / 来宾访问 | 允许无密码访问；默认匿名用户只读 |
-| 同时允许匿名用户上传、删除 | 仅前两个开关均开启时有效；匿名用户也能覆盖或删除文件 |
+| 允许账号用户上传、覆盖、删除 | 账号用户可写；关闭时账号只读 |
+| 允许匿名 / 来宾访问 | 无需密码即可读取；默认关闭 |
+| 同时允许匿名用户上传、删除 | 前两个开关均开启时才可开启；匿名用户可覆盖、删除 |
 
-5. 点击“启动文件共享”。连接同一 Wi-Fi，或让其他终端连接手机热点。界面显示 FTP、SMB 地址和 SMB 启动状态；复制按钮可选择协议。
-6. 用完从界面或通知点击“停止共享”。修改权限必须先停止服务再启动，因此不会在连接过程中扩大用户权限。
+写入直接修改手机文件，删除不进入回收站；仅允许删除空目录。取消或中断上传可能留下不完整文件，覆盖中断可能影响原文件。只向可信局域网共享，并对重要文件保留备份。
 
-写入直接修改手机文件，删除不进入回收站；目录删除仅允许空目录。匿名写入意味着局域网内任何可连接的设备都可改动共享文件，请只对可公开且有备份的目录开启。
+密码不写入偏好设置；服务退出后重新打开界面会生成新密码。浏览器使用标准 HTTP Basic 身份验证，不在页面脚本中保存密码；浏览器可能缓存登录凭据，可关闭对应隐私浏览窗口结束缓存会话。错误账号不会自动降级为匿名。
 
-密码仅在服务和界面内存中保留，不写入偏好设置；服务退出后重新打开界面生成新密码。目录授权、用户名、端口和权限选项会保存。
+## FTP 与 SMB
 
-## iPad“文件”App：SMB
+- FTP：`ftp://手机IP:2121`，可自定义端口。推荐 FileZilla 或其他 FTP 客户端，支持主动/被动模式、断点下载、上传、追加、重命名、空目录操作。
+- SMB：共享名固定为 `share`。服务先尝试 TCP 445；被 Android 权限或占用阻止时，回退到 1445（与 FTP 冲突时用 1446）。实际端口会显示在界面，可手动配置高位端口。
+- Windows 文件资源管理器通常使用 `\\手机IP\share` 和 445；使用高位 SMB 端口需要相应客户端支持。
+- **不能保证免 Root 手机上的高位 SMB 端口兼容 iPad 原生“文件”App。iPad 建议直接使用 Safari 网页入口。** 如需尝试原生连接，在“文件 → 浏览 → 连接服务器”中填写实际 SMB 地址。
+- SMB 使用 NTLMv2、SMB 2.0.2 / 2.1 和 SMB2 消息签名；不支持 SMB1 文件操作或 SMB3 内容加密。要求消息签名的客户端可能不允许来宾会话，可改用注册账号。
 
-文件 → 浏览 → 右上角菜单 → 连接服务器，输入应用显示的 SMB 地址，如 `smb://192.168.1.20/share`，选择“注册用户”并填写账号密码；共享名固定为 `share`。开启匿名访问后可尝试选择“客人”。
+3.0 修复复合 SMB 请求的共享标识继承：CREATE 后的相关 QUERY_INFO / QUERY_DIRECTORY 可使用继承的 TreeId / SessionId / FileId，并正确返回相关操作标志；查询失败不会阻止 CLOSE 释放句柄。新增签名复合请求回归，覆盖挂载时的文件系统属性查询和空目录枚举。该修复已在独立协议客户端验证，尚无 iPad 原生客户端真机通过的证据。
 
-**免 Root 的端口限制：** 服务先尝试标准 TCP 445。若手机内核权限、SELinux 或端口占用使 445 不可用，会自动尝试 1445（FTP 已占用 1445 时使用 1446），界面明确显示实际端口。自定义端口也可在界面设置。
+## 文件与系统边界
 
-高位端口不是 iPad 原生兼容性的保证。iPad“文件”App 对高位端口及来宾会话的支持需按实际系统测试；若不接受 `smb://IP:1445/share`，不能靠改变地址格式或关闭密码解决。可使用支持自定义 SMB 端口 / FTP 的客户端，或在同一局域网另一台有权限的设备上，将它的 TCP 445 转发到手机的 SMB 端口，再让 iPad 连接该设备的 `smb://设备IP/share`。手机本身无需 Root。不要将此转发暴露到公网。
+- 使用 Android SAF 系统文件夹授权，所有协议限制在该目录内；不申请“所有文件访问权限”或 Root。受 Android 限制，不能访问其他应用私有数据；部分系统禁止选择存储根目录、Download 根目录或 Android/data，可选择具体子文件夹。
+- 下载按流读取，网页上传按流写入，不将整个大文件加载到内存或上传到外部服务。网页支持 HTTP Range 断点下载和 Content-Length / chunked 上传。
+- 网页不依赖 CDN、外部脚本或云端。文件名按文本显示；修改请求检查来源和自定义请求头，不开放跨域访问。
+- HTTP、FTP 和 SMB2 不提供文件内容加密，只用于可信局域网，不映射公网端口。
+- 不支持完整 Windows ACL、锁、远程命令执行、跨目录重命名、符号链接共享或任意文档提供器能力。时间戳、剩余空间及写入能力依赖 Android 提供器，失败时返回错误。
+- 网页最多 12 个并发连接，FTP / SMB 各最多 8 个连接；每个 SMB 会话最多 256 个打开句柄，闲置连接约 120 秒断开。网页默认 8080，端口不可用时尝试到 8090，最终端口显示在主界面。
+- 前台通知和 CPU / Wi-Fi 锁帮助保持传输，厂商省电策略仍可能干预。Android 15 的累计后台 dataSync 时限约 6 小时，达到后停止，需手动重启。
 
-SMB 使用 NTLMv2，可验证并生成 SMB2 消息签名，支持 SMB 2.0.2 / 2.1、共享枚举及基本文件读写。**不支持 SMB1 文件访问或 SMB3 内容加密。** 要求消息签名的客户端可能禁止匿名会话；此时使用注册账号。没有修改或降低客户端系统安全策略。
-
-## Windows 与其他客户端
-
-- SMB 标准端口：文件资源管理器输入 `\\手机IP\share`。Windows 资源管理器通常不接受自定义 SMB 端口，遇到高位端口时使用兼容客户端或同网段 445 转发设备。
-- FTP：文件资源管理器地址栏输入 `ftp://手机IP:2121`；浏览下载可用系统集成，上传、删除推荐使用 FileZilla。
-- FileZilla：协议 FTP，主机填写手机 IP，端口默认 2121，加密选择“普通 FTP”；使用注册账号，或开启匿名后选择匿名登录。建议被动模式。
-- iPad FTP：使用 FE File Explorer 等支持 FTP 的客户端，系统“文件”App 不支持 FTP。
-
-FTP 支持 UTF-8 中文文件名、PASV/EPSV、PORT、SIZE、MDTM、MLSD、下载断点续传、上传/覆盖（STOR）、追加（APPE）、删除（DELE）、新建/删除空目录（MKD/RMD）、同目录重命名（RNFR/RNTO）。FTP 上传续传 REST+STOR 暂不支持。
-
-## 范围和限制
-
-- 仅访问授权目录及其子目录，不申请“所有文件访问权限”。系统可能禁止授权内部存储根目录、Downloads 根目录、Android/data、Android/obb、其他应用私有数据等；以系统选择器为准。
-- Android 文档提供器必须授予写权限并支持修改操作。SMB 随机写入需要本地提供器支持可定位的文件描述符，推荐手机本地存储。云端文档、虚拟文件或只读 SD 卡可能不支持。
-- 当前不支持跨目录移动、非空目录递归删除、文件 ACL、备用数据流、持久句柄、文件变更通知、字节范围锁、保证任意设置文件时间戳等完整 Windows 文件服务器功能。内容修改时间由 Android 提供器更新；SMB 设置修改时间会尝试通过已授权文件描述符完成，提供器拒绝时返回失败；不伪造不支持操作的成功结果。
-- FTP 明文传输；SMB2 签名用于完整性验证，不加密文件内容。只在可信局域网使用，不映射公网端口。
-- 访客 Wi-Fi、客户端隔离、防火墙、省电或厂商后台限制可能阻止连接。前台通知及 CPU/Wi-Fi 锁用于保持传输；Android 15 累计后台 dataSync 时限到达后会停止，需要手动重启。
-- FTP、SMB 各最多 8 个连接；每个 SMB 会话最多 256 个打开句柄。闲置连接约 120 秒断开。
-- Android 模拟器检查不等同于安卓手机、Windows 资源管理器或 iPad“文件”App 真机验证。特别是 445 端口与 iPad 客户端行为必须在实际设备上验收。
+“连接诊断”显示启动目录项数、网页请求状态、SMB TCP 连接／帧／命令／目录请求计数，以及有界的最近事件。不记录文件名、密码或账号。网页与 SMB 的计数用于区分网络、认证和目录读取故障。
 
 ## 构建
 
-JDK 17 或 21、Android SDK Platform 35 / Build Tools 35.0.0。Gradle Wrapper 8.9、Android Gradle Plugin 8.7.3。应用运行时没有第三方依赖。
+JDK 17 / 21、Android SDK Platform 35 / Build Tools 35.0.0，Gradle Wrapper 8.9、AGP 8.7.3。应用运行时无第三方依赖。
 
 ```sh
 export JAVA_HOME=/path/to/jdk
 export ANDROID_HOME=/path/to/android-sdk
-./gradlew --no-daemon --max-workers=2 :app:assembleDebug :app:lintDebug
+./gradlew --no-daemon --max-workers=2 :app:assembleDebug :app:assembleRelease :app:lintDebug
 ```
 
-调试 APK 自动签名：`app/build/outputs/apk/debug/app-debug.apk`。Release：`:app:assembleRelease`，生成未签名包后使用自己的安全保管的签名密钥签署。云环境可使用 `./scripts/cloud-build.sh` 激活保留的工具及受信代理 CA，使用 `./scripts/sign-local.sh 2.2` 签名。
-
-签名私钥保存在云环境仓库外，未进入源码或下载目录。后续更新需使用同一密钥。Gradle 下载保留官方校验值，TLS 校验保持开启。
+云环境使用 `./scripts/cloud-build.sh` 激活已有工具及受信代理 CA。调试包：`app/build/outputs/apk/debug/app-debug.apk`。Release 构建生成未签名包；可使用自己保管的签名密钥签署，云环境使用 `./scripts/sign-local.sh 3.0`。签名私钥位于仓库外，不包含在源码、APK 或下载目录中。后续更新需使用同一密钥。下载及 TLS 校验保持开启。
 
 ## 验证
+
+[3.0 验证记录与实际 Android 输出](docs/validation-3.0.md)。
 
 ```sh
 python3 tests/test_ftp.py
 python3 -m venv /tmp/lanftp-tests
 /tmp/lanftp-tests/bin/pip install -r tests/requirements.txt
 /tmp/lanftp-tests/bin/python tests/test_sharing.py
+python3 tests/test_web.py
 ./gradlew --no-daemon --max-workers=2 :app:lintDebug
 ```
 
-12 项 FTP 回归测试与 16 项跨协议功能测试使用生产 Java 引擎，测试后端为带边界检查的临时本地目录。共享测试使用 smbprotocol 和 Impacket 两套独立 SMB 实现，覆盖中文读写、签名认证及篡改拒绝、FTP/SMB 交叉传输校验、随机写入/截断、重命名、删除、空目录约束、匿名关闭/只读/可写、错误密码不降级匿名、共享枚举、越界/符号链接拦截和未登录请求。
+12 项 FTP、17 项跨协议与 SMB、9 项网页测试，使用生产 Java 引擎与有边界检查的临时本地目录。覆盖中文读写、签名认证与篡改拒绝、复合请求继承、共享枚举、文件标识、目录格式、上传覆盖、分块上传、Range 下载、重命名删除、匿名关闭／只读／可写、错误密码不降级、越界与符号链接拦截、跨站修改拦截、重复请求头与歧义传输长度拒绝。
 
-真机验收：授权本地目录，分别测试账号只读、账号可写、匿名只读、匿名可写；核对 Windows/iPad 与手机文件内容及大小；确认删除只影响共享目录；检查实际 SMB 端口；熄屏后传输并验证停止服务后不可连接。文档提供器的能力与 iPad 原生客户端兼容性不能由主机协议测试替代。
+实际浏览器操作测试需要 Node、Playwright 与 Chromium：
 
-### Android 11 AOSP 模拟器烟雾检查
+```sh
+python3 tests/run_browser_smoke.py
+```
 
-本次已实际验证：应用以普通 UID 运行，系统选择器授予真实 SAF 读写权限；445 被拒绝后回退到 1445；FTP/SMB 中文上传、跨协议下载逐字节校验、重命名、删除、目录操作、匿名只读限制和停止服务均通过。该结果不代表 iPad 自带“文件”App 已真机通过。
+在桌面和平板尺寸下实际操作匿名只读、账号登录、新建目录、中文上传、确认覆盖、下载逐字节校验、删除；同时检查页面没有 JavaScript 错误。使用 Chromium，不代表 Safari 引擎或 iPad 真机已通过。
 
-`SmokeInstrumentation` 只存在于测试 APK，使用标准初始目录提示打开一次性测试目录，再通过系统确认按钮授予权限，不伪造权限，不调用 Root。仅用于可丢弃的 AOSP 模拟器。复现步骤（需要 Android SDK adb 和已启动的 emulator-5554）：
+### Android 11 AOSP 模拟器集成验证
+
+测试 APK 使用普通应用 UID，打开真实系统目录选择器并授予 SAF 读写权限；不伪造授权，不调用 Root。仅限可丢弃的 AOSP 模拟器。
 
 ```sh
 ./scripts/cloud-build.sh :app:assembleDebug :app:assembleDebugAndroidTest
@@ -101,10 +101,10 @@ adb -s emulator-5554 shell run-as com.lanftp rm -f files/smoke-ready files/smoke
 adb -s emulator-5554 shell am instrument -w -r com.lanftp.test/com.lanftp.SmokeInstrumentation
 ```
 
-最后一条命令保持运行期间，在另一个终端执行（Python 环境需安装 `tests/requirements.txt`）：
+最后一条命令运行期间，在另一个终端执行：
 
 ```sh
-ADB=/path/to/android-sdk/platform-tools/adb ANDROID_TEST_SERIAL=emulator-5554 python tests/android_host_smoke.py
+BROWSER_SMOKE=1 ADB=/path/to/adb ANDROID_TEST_SERIAL=emulator-5554 python tests/android_host_smoke.py
 ```
 
-主机检查通过 adb 转发真实 TCP 数据，并逐个转发 FTP 的动态被动端口；实际文件操作仍由 Android 普通应用 UID 和授权文档提供器执行。结束后关闭本次共享并移除自己创建的转发。SDK 无 KVM 时启动和系统 UI 操作较慢。
+主机通过 adb TCP 转发访问实际 Android 前台服务；文件操作仍由普通应用 UID 和真实 SAF 提供器执行。检查网页／FTP／SMB 的中文读写、跨协议逐字节校验、目录操作、匿名写入拒绝、网页 Range 下载、实际浏览器全流程和停止服务。结束后关闭测试共享、移除自己创建的转发。无 KVM 时，模拟器冷启动与系统选择器操作较慢。
